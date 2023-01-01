@@ -9,19 +9,22 @@ class Ship():
         self.map = map
         self.name = name
         self.used = [] #coordinates that the ship is located on
+        self.used_copy = [] #used for extracting bordering cells once ship has fallen
 
-    def ship_orientation(self):
-        clear()
-        print(f'Current ship ({self.name}): \n{self.map}')
-        choice = input('How do you want your ship orientation? Type \'V\' for vertical, \'H\' for horizontal: ')
-        choice = choice.upper()
-        
-        while choice != 'V' and choice != 'H':
-            choice = input('Type \'V\' for vertical, \'H\' for horizontal: ')
+    def ship_orientation(self, type):
+        if type == 1 or type == 2:
+            clear()
+            print(f'Current ship ({self.name}): \n{self.map}')
+            choice = input('How do you want your ship orientation? Type \'V\' for vertical, \'H\' for horizontal: ')
             choice = choice.upper()
+            
+            while choice != 'V' and choice != 'H':
+                choice = input('Type \'V\' for vertical, \'H\' for horizontal: ')
+                choice = choice.upper()                       
+        elif type == 3: choice = 'H'
+        elif type == 4: choice = 'V'
         
         cell_count = self.map.count('X')
-        
         if choice == 'H':
             self.map = 'X ' * (cell_count-1) + 'X' #account for the extra space
             clear()
@@ -35,28 +38,46 @@ class Ship():
         count = self.map.count('X')
         places = []
         if '\n' not in self.map:
-            if y + count-1 > 7:
+            if y + count-1 > 9:
                 return False
             for i in range(count):
                 places.append([x, y+i])
                 self.used.append(f'{n_to_l[x]}{y+i}')
+                self.used_copy.append(f'{n_to_l[x]}{y+i}')
             return places
         else:
-            if x + count-1 > 7:
+            if x + count-1 > 9:
                 return False
             for i in range(count):
                 places.append([x+i, y])
                 self.used.append(f'{n_to_l[x+i]}{y}')
+                self.used_copy.append(f'{n_to_l[x+i]}{y}')
             return places
 
+    def border_cells(self): #returns list of all cells bordering the current ship
+        coordinates = []
+        border = []
+        for cell in self.used_copy:
+            x = l_to_n[cell[0]]
+            y = int(cell[1])
+            coordinates.append((x, y))
+        
+        for x, y in coordinates:
+            for i in range(-1, 2):
+                for j in range(-1, 2):
+                    if (x+i, y+j) in coordinates or x+i < 0 or y+j < 0:
+                        continue
+                    border.append((x+i, y+j))    
+        return border
+                
 class Board():
     def __init__(self, player, type):
         self.player = player
         self.type = type
 
         #initialize grid
-        self.grid = [['O' for i in range(8)] for i in range(8)]
-        self.temp = [['~' for i in range(8)] for i in range(8)]
+        self.grid = [['~' for i in range(10)] for i in range(10)]
+        self.temp = [['~' for i in range(10)] for i in range(10)]
 
         #initialize ships
         self.ship1 = Ship('X X X X', 'Ship One')
@@ -71,6 +92,7 @@ class Board():
 
         self.targets = [] #list of cells with a part of a ship on them; database for opposing player's attacks
         self.chosen = [] #list of cells by which self has attacked on opponent's board
+        self.used_coords = [] #list of cells for random ship placement
 
     def placement(self, ship_index):
         clear()
@@ -84,7 +106,7 @@ class Board():
         print('Input the position you want the top left corner of your ship to be in.')
         print('For example, if you want your vertical ship to be {A0, B0, C0}, then type "A0".')
         pos = input('Enter position: ')
-        while pos not in possible:
+        while pos not in possible or self.temp[l_to_n[pos[0]]][int(pos[1])] != '~':
             pos = input('Incorrect input. Enter position: ')
         pos = pos.upper()
         inputs = [i for i in pos]
@@ -95,25 +117,36 @@ class Board():
             self.targets.clear()
             for ship in self.ships:
                 ship.used.clear()
+                ship.used_copy.clear()
             print('Ship out of range! Restarting placement...')
             time.sleep(3)
             self.temp = [['O' for i in range(8)] for i in range(8)]
             return self.placement(0)
         
+        #checks availability for every potential cell in current ship
         for cell in ship_cells:
-            if f'{n_to_l[cell[0]]}{cell[1]}' in self.targets:
+            if f'{n_to_l[cell[0]]}{cell[1]}' in self.targets or self.temp[cell[0]][cell[1]] != '~':
                 self.targets.clear()
                 for ship in self.ships:
                     ship.used.clear()
                 print('Ship position already taken! Restarting placement...')
                 time.sleep(3)
-                self.temp = [['O' for i in range(8)] for i in range(8)]
+                self.temp = [['~' for i in range(10)] for i in range(10)]
                 return self.placement(0)
             
             self.temp[cell[0]][cell[1]] = 'X'
 
+
             cell[0] = n_to_l[cell[0]]
             self.targets.append(f'{cell[0]}{cell[1]}')
+        
+        #account for bordered cells
+        bordercells = current_ship.border_cells()
+        for x, y in bordercells:           
+            try:
+                self.temp[x][y] = '_'
+            except IndexError:
+                continue
         clear()
 
         if ship_index == len(self.ships)-1:
@@ -126,20 +159,60 @@ class Board():
             self.placement(ship_index)
 
     def change_orientation(self, ship):
+        if ship.name == 'Ship Seven':
+            return
         print(f'Current ship ({ship.name}):\n{ship.map}')
         change_o = input('Would you like to change your ship orientation? Type \'Y\' for yes, \'N\' for no: ')
         change_o = change_o.upper()
         while change_o != 'Y' and change_o != 'N':
             change_o = input('Incorrect input. Type \'Y\' for yes, \'N\' for no: ')
         while change_o == 'Y':
-            ship.ship_orientation()
+            ship.ship_orientation(self.type)
             print(f'Current ship ({ship.name}):\n{ship.map}')
             change_o = input('Would you like to change your ship orientation? Type \'Y\' for yes, \'N\' for no: ')
             change_o = change_o.upper()
         clear()
 
-    def bot_placement(self):
-        pass
+    def bot_placement(self, n):
+        L = len(self.ships)
+        ship = self.ships[n]
+
+        ship.ship_orientation(random.choice([3, 4]))
+        x = random.randint(0, 7)
+        y = random.randint(0, 7)
+        ship_cells = ship.ship_location(x, y)
+        
+        if ship_cells == False:
+            self.targets.clear()
+            self.used_coords.clear()
+            self.bot_placement(0)
+            return
+
+        for i in ship_cells:
+            if f'{n_to_l[i[0]]}{i[1]}' in self.targets or i in self.used_coords:
+                self.targets.clear()
+                self.used_coords.clear()
+                self.bot_placement(0)
+                return
+            i[1] = n_to_l[i[1]]
+            self.targets.append(f'{i[1]}{i[0]}')
+        
+        if n == L-1:
+            temp = [['~' for i in range(10)] for i in range(10)]
+            for i in self.targets:
+                temp[l_to_n[i[0]]][int(i[1])] = 'X'
+            for i in temp:
+                print(i)
+            print(self.targets)
+            time.sleep(200)
+            return
+        else:
+            bordercells = ship.border_cells()
+            for t in bordercells:
+                self.used_coords.append([t[0], t[1]])
+
+            n += 1
+            self.bot_placement(n)
 
     def play(self, turn): #0 = same player, 1 = different player
         clear()
@@ -152,6 +225,8 @@ class Board():
             opponent = p2
         elif self.type == 2:
             opponent = p1
+        elif self.type == 4:
+            opponent = p3
         
         self.show_board(0)
 
@@ -176,6 +251,14 @@ class Board():
                     print(f'You sunk {ship.name}!')
                     opponent.ships.remove(ship)
                     print(f'{len(opponent.ships)} ship(s) left to go')
+                    bordercells = ship.border_cells()
+                    for i, j in bordercells:
+                        try:
+                            opponent.grid[i][j] = '_'
+                        except IndexError:
+                            continue
+                        self.chosen.append(f'{n_to_l[i]}{j}')
+            
             if len(opponent.ships) == 0:
                 print(f'{self.player} wins! Good game.')
                 return
@@ -188,30 +271,110 @@ class Board():
             print('Miss!')
             time.sleep(2)
             clear()
+            if opponent == p3:
+                opponent.bot_play(None)
+                return
             opponent.play(1)
 
-    def bot_play(self):
-        pass
+    def bot_play(self, pos=None):
+        self.show_board(0)
+        print('The computer is deciding. . .')
+        time.sleep(3)
+        options = []
+        print('hi')
+        if pos == None:
+            x = random.randint(0, 7)
+            y = random.randint(0, 7)
+            while p1.grid[x][y] != '~':
+                x = random.randint(0, 7)
+                y = random.randint(0, 7)
+            options = (x, y)
+            cell = f'{n_to_l[x]}{y}'
+        else:
+            i = l_to_n[pos[0]]
+            j = int(pos[1])
+            try:
+                if self.grid[i][j-1] == '~':
+                    options.append((i, j-1))
+            except IndexError:
+                pass
+            try:
+                if self.grid[i][j+1] == '~':
+                    options.append((i, j+1))
+            except IndexError:
+                pass
+            try:
+                if self.grid[i-1][j] == '~':
+                    options.append((i-1, j))
+            except IndexError:
+                pass
+            try:
+                if self.grid[i+1][j] == '~':
+                    options.append((i+1, j))
+            except IndexError:
+                pass
+            options = random.choice(options)
+            x = options[0]
+            y = options[1]
+            cell = f'{n_to_l[x]}{y}'
+        
+        instance = True
+        if cell in p1.targets:
+            p1.grid[x][y] = 'X'
+            clear()
+            self.show_board(0)
+            print('The computer made a hit!')
+            time.sleep(3)
+            for ship in p1.ships:
+                if cell in ship.used:
+                    ship.used.remove(cell)
+                if len(ship.used) == 0:
+                    print(f'The computer sank {ship.name}!')
+                    p1.ships.remove(ship)
+                    print(f'{len(p1.ships)} ship(s) to go.')
+                    time.sleep(3)
+                    instance = False
+            if len(p1.ships) == 0:
+                print(f'The computer wins!')
+                return
+            if instance:
+                clear()
+                self.bot_play(cell)
+            else:
+                self.bot_play(None)
+        else:            
+            p1.grid[x][y] = '_'
+            clear()
+            self.show_board(0)
+            print('The computer missed!')
+            time.sleep(2)
+            clear()
+            p1.play(1)
 
     def show_board(self, board): #board=0: grid; board=1: temp
-        #define opponent
         if board == 1:
             count = -1
             for j in self.temp:
                 if count == -1:
-                    print('  ', ['0', '1', '2', '3', '4', '5', '6', '7'])
+                    print('  ', ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
                 count += 1
                 print(f'{letters[count]}: {j}')
+        
+        #define opponent
         else:
             if self.type == 1:
                 opponent = p2
             elif self.type == 2:
                 opponent = p1
+            elif self.type == 3:
+                opponent = p1
+            elif self.type == 4:
+                opponent = p3
             
             count = -1
             for j in opponent.grid:
                 if count == -1:
-                    print('  ', ['0', '1', '2', '3', '4', '5', '6', '7'])
+                    print('  ', ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
                 count += 1
                 print(f'{letters[count]}: {j}')
             print(f'{opponent.player}\'s Board')
@@ -233,6 +396,17 @@ if choice == 'm':
         name2 = input('Please don\'t enter the same name as Player One. Enter your name: ')
     p1 = Board(name1, 1)
     p2 = Board(name2, 2)
+    p3 = Board('Computer', 3)
     p1.placement(0)
     p2.placement(0)
+    p1.play(1)
+elif choice == 's':
+    name1 = input('Player, enter your name: ')
+    name2 = 'Null'
+    clear()
+    p1 = Board(name1, 4)
+    p2 = Board(name2, 2)
+    p3 = Board('Computer', 3)
+    p1.placement(0)
+    p3.bot_placement(0)
     p1.play(1)
