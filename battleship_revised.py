@@ -1,7 +1,7 @@
 import random #have bot choose randomly from all possibilities of ship orientations
 import time
 import os
-from battlefield_info import n_to_l, l_to_n, possible, letters
+from battlefield_info import n_to_l, l_to_n, possible, letters, bot_data
 clear = lambda: os.system('cls')
 
 class Ship():
@@ -173,52 +173,44 @@ class Board():
             change_o = change_o.upper()
         clear()
 
-    def bot_placement(self, n):
-        L = len(self.ships)
-        ship = self.ships[n]
+    def bot_placement(self):
+        for ship in self.ships:
+            state = True
+            while state == True:
+                ship.ship_orientation(random.choice([3, 4]))
+                x = random.randint(0, 7)
+                y = random.randint(0, 7)
+                ship_cells = ship.ship_location(x, y)
 
-        ship.ship_orientation(random.choice([3, 4]))
-        x = random.randint(0, 7)
-        y = random.randint(0, 7)
-        ship_cells = ship.ship_location(x, y)
-        
-        if ship_cells == False:
-            self.targets.clear()
-            self.used_coords.clear()
-            self.bot_placement(0)
-            return
+                if ship_cells == False:
+                    print('failed')
+                    continue
+                
+                x = True
+                for position in ship_cells:
+                    if self.temp[position[0]][position[1]] != '~':
+                        x = False
+                
+                if x == False:
+                    continue
+                
+                for position in ship_cells:
+                    self.temp[position[0]][position[1]] = 'X'
+                    self.targets.append(f'{n_to_l[position[0]]}{position[1]}')
 
-        for i in ship_cells:
-            if f'{n_to_l[i[0]]}{i[1]}' in self.targets or i in self.used_coords:
-                self.targets.clear()
-                self.used_coords.clear()
-                self.bot_placement(0)
-                return
-            i[1] = n_to_l[i[1]]
-            self.targets.append(f'{i[1]}{i[0]}')
-        
-        if n == L-1:
-            temp = [['~' for i in range(10)] for i in range(10)]
-            for i in self.targets:
-                temp[l_to_n[i[0]]][int(i[1])] = 'X'
-            for i in temp:
-                print(i)
-            print(self.targets)
-            time.sleep(200)
-            return
-        else:
-            bordercells = ship.border_cells()
-            for t in bordercells:
-                self.used_coords.append([t[0], t[1]])
+                    bordercells = ship.border_cells()
+                    for t in bordercells:
+                        try:
+                            self.temp[t[0]][t[1]] = '_'
+                        except IndexError:
+                            continue
+                state = False
 
-            n += 1
-            self.bot_placement(n)
-
-    def play(self, turn): #0 = same player, 1 = different player
+    def play(self, turn, botpos=None, botupdated=None, botdirection=None, botfailed=None): #0 = same player, 1 = different player ; pos paramter is for bot play
         clear()
         if turn == 1:
             print(f'{self.player}\'s turn')
-            time.sleep(3)
+            #time.sleep(3)
             clear()
 
         if self.type == 1:
@@ -252,6 +244,7 @@ class Board():
                     opponent.ships.remove(ship)
                     print(f'{len(opponent.ships)} ship(s) left to go')
                     bordercells = ship.border_cells()
+                    print(bordercells)
                     for i, j in bordercells:
                         try:
                             opponent.grid[i][j] = '_'
@@ -263,7 +256,7 @@ class Board():
                 print(f'{self.player} wins! Good game.')
                 return
             time.sleep(2)
-            self.play(0)
+            self.play(0, botpos, botupdated, botdirection, botfailed)
         else:
             opponent.grid[x][y] = '_'
             clear()
@@ -272,16 +265,138 @@ class Board():
             time.sleep(2)
             clear()
             if opponent == p3:
-                opponent.bot_play(None)
+                opponent.bot_play(botpos, botupdated, botdirection, botfailed)
                 return
             opponent.play(1)
 
-    def bot_play(self, pos=None):
+    def bot_play(self, pos=None, updated=None, direction=None, failed=False):
+        self.show_board(0)
+        print('The computer is deciding. . .')
+        time.sleep(3)
+
+        if failed == True:
+
+            if direction == 'right':
+                guess = (pos[0] - 1, pos[1])
+                direction = 'left'
+            
+            elif direction == 'left':
+                guess = (pos[0] + 1, pos[1])
+                direction = 'right'
+            
+            elif direction == 'up':
+                guess = (pos[0], pos[1] + 1)
+                direction = 'down'
+                    
+            elif direction == 'down':
+                guess = (pos[0], pos[1] - 1)
+                direction = 'up'
+      
+        if pos == None: #if there is nothing stored from previous turn
+            guess = random.choice(bot_data)
+            while p1.grid[guess[0]][guess[1]] != '~':
+                bot_data.remove(guess)
+                guess = random.choice(bot_data)
+      
+        elif updated == None: #if previous turn initially found ship 
+            possible = {'right': (pos[0] + 1, pos[1]), 'left': (pos[0] - 1, pos[1]), 'up': (pos[0], pos[1] + 1), 'down': (pos[0], pos[1] - 1)}
+
+            guess = random.choice(['right', 'left', 'up', 'down'])
+            while possible[guess] not in bot_data:
+                guess = random.choice(['right', 'left', 'up', 'down'])
+
+            direction = guess
+            guess = possible[direction]
+
+        elif failed == False: #if more than 2 cells of ship is already found, and the direction has not failed yet
+
+            if direction == 'right':
+                guess = (updated[0] + 1, updated[1])
+                if guess[0] > 9:
+                    guess = (pos[0] - 1, pos[1])
+                    direction = 'left'
+
+            elif direction == 'left':
+                guess = (updated[0] - 1, updated[1])
+                if guess[0] < 0:
+                    guess = (pos[0] + 1, pos[1])
+                    direction = 'right'
+            
+            elif direction == 'up':
+                guess = (updated[0], updated[1] - 1)
+                if guess[1] < 0:
+                    guess = (pos[0], pos[1] + 1)
+                    direction = 'down'
+                    
+            elif direction == 'down':
+                guess = (updated[0], updated[1] + 1)
+                if guess[1] > 9:
+                    guess = (pos[0], pos[1] - 1)
+                    direction = 'up'
+        
+        if guess in bot_data:
+            bot_data.remove(guess)
+
+        x = guess[0]
+        y = guess[1]
+        target = f'{n_to_l[x]}{y}'
+
+        if target in p1.targets:
+            p1.grid[x][y] = 'X'
+            clear()
+            self.show_board(0)
+            print('The computer made a hit!')
+            time.sleep(3)
+            shipdown = False
+            
+            for ship in p1.ships:
+                if target in ship.used:
+                    ship.used.remove(target)
+                    #print(ship.name)
+                    #print(len(ship.used))
+                    #time.sleep(5)
+                if len(ship.used) == 0:
+                    print(f'The computer sank {ship.name}!')
+                    bordercells = ship.border_cells()
+                    for x, y in bordercells:           
+                        try:
+                            p1.grid[x][y] = '_'
+                        except IndexError:
+                            continue
+                    p1.ships.remove(ship)
+                    shipdown = True
+                    print(f'{len(p1.ships)} ship(s) to go.')
+                    time.sleep(3)
+                    #guess = None
+            
+            if len(p1.ships) == 0:
+                print(f'The computer wins!')
+                return
+
+            if shipdown == True:
+                self.bot_play(None, None, None, False)
+            elif pos == None:
+                self.bot_play(guess, None, None, False)
+            else:                
+                updated = guess
+                self.bot_play(pos, updated, direction, False)
+        
+        else:
+            p1.grid[x][y] = '_'
+            clear()
+            self.show_board(0)
+            print('The computer missed!')
+            time.sleep(3)
+            clear()
+            if pos != None:
+                p1.play(1, pos, updated, direction, True) 
+            p1.play(1, pos, updated, direction, False)
+
+    def bot_play_draft(self, pos=None):
         self.show_board(0)
         print('The computer is deciding. . .')
         time.sleep(3)
         options = []
-        print('hi')
         if pos == None:
             x = random.randint(0, 7)
             y = random.randint(0, 7)
@@ -397,9 +512,24 @@ if choice == 'm':
     p1 = Board(name1, 1)
     p2 = Board(name2, 2)
     p3 = Board('Computer', 3)
-    p1.placement(0)
-    p2.placement(0)
+    input_type = input('Player One, type \'m\' to have manual ship positioning, or type \'a\' to have automatic ship positioning: ')
+    while input_type != 'm' and input_type != 'a':
+        input_type = input('Type \'m\' to have manual ship positioning, or type \'a\' to have automatic ship positioning: ')
+    if input_type == 'a':
+        p1.bot_placement()
+    else:
+        p1.placement(0)
+    
+    input_type = input('Player Two, type \'m\' to have manual ship positioning, or type \'a\' to have automatic ship positioning: ')
+    while input_type != 'm' and input_type != 'a':
+        input_type = input('Type \'m\' to have manual ship positioning, or type \'a\' to have automatic ship positioning: ')
+    if input_type == 'a':
+        p2.bot_placement()
+    else:
+        p2.placement(0)
+
     p1.play(1)
+
 elif choice == 's':
     name1 = input('Player, enter your name: ')
     name2 = 'Null'
@@ -407,6 +537,16 @@ elif choice == 's':
     p1 = Board(name1, 4)
     p2 = Board(name2, 2)
     p3 = Board('Computer', 3)
-    p1.placement(0)
-    p3.bot_placement(0)
+    input_type = input('Player, type \'m\' to have manual ship positioning, or type \'a\' to have automatic ship positioning: ')
+    while input_type != 'm' and input_type != 'a':
+        input_type = input('Type \'m\' to have manual ship positioning, or type \'a\' to have automatic ship positioning: ')
+    if input_type == 'a':
+        p1.bot_placement()
+    else:
+        p1.placement(0)
+    
+    p3.bot_placement()
+    print(p1.targets)
+    print(p3.targets)
+    input()
     p1.play(1)
